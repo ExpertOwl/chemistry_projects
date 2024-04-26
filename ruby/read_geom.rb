@@ -4,11 +4,13 @@ require 'matrix'
 require 'csv'
 
 RAD_TO_DEG = 180 / Math::PI
-ATOMIC_WEIGHTS = []
-CSV.foreach('../shared_data/atomic_weights.csv') { |row| ATOMIC_WEIGHTS << row[0].to_f }
-ATOMIC_WEIGHTS.freeze
+
 # filename = 'h2o_geom.txt'
 filename = 'acetaldehyde.dat'
+
+atomic_weights = []
+CSV.foreach('../shared_data/atomic_weights.csv') { |row| atomic_weights << row[0].to_f }
+ATOMIC_WEIGHTS = atomic_weights.freeze
 
 def read_geom(filename)
   f = File.new(filename)
@@ -20,12 +22,12 @@ def read_geom(filename)
     atomic_number << atom_xyz[0]
     geom << atom_xyz[1..3]
   end
-  geom = Matrix[*geom]
-  [atomic_number, geom]
+  [Vector[*atomic_number], Matrix[*geom]]
 end
 
 def distance(atom_i, atom_j)
-  Math.sqrt((atom_i[0] - atom_j[0])**2 + (atom_i[1] - atom_j[1])**2 + (atom_i[2] - atom_j[2])**2)
+  (atom_j - atom_i).magnitude
+  # Math.sqrt((atom_i[0] - atom_j[0])**2 + (atom_i[1] - atom_j[1])**2 + (atom_i[2] - atom_j[2])**2)
 end
 
 def print_d_matrix(distance_matrix)
@@ -40,15 +42,7 @@ def print_d_matrix(distance_matrix)
 end
 
 def distance_matrix(geom)
-  distance_matrix = []
-  geom.each do |atom1|
-    row = []
-    geom do |atom2|
-      row << distance(atom1, atom2)
-    end
-    distance_matrix << row
-  end
-  distance_matrix
+  Matrix.build(geom.row_count) {|i, j| distance(geom.row(i),geom.row(j))}
 end
 
 def bond_angle(atom_i, atom_j, atom_k)
@@ -57,7 +51,7 @@ def bond_angle(atom_i, atom_j, atom_k)
 end
 
 def unit_vector(atom_i, atom_j)
-(Vector[*atom_j] - Vector[*atom_i]).normalize
+  (atom_i - atom_j).normalize
 end
 
 def out_of_plane_angle(atom_i, atom_j, atom_k, atom_l)
@@ -83,13 +77,13 @@ def torsion_angle(atom_i, atom_j, atom_k, atom_l)
 end
 
 _atomic_number, geom = read_geom(filename)
-
-
+distance_matrix(geom)
 p (ATOMIC_WEIGHTS[1] - 1.008).abs < Float::EPSILON
 p (distance(geom.row(0), geom.row(1)) - 2.845112131228).abs < Float::EPSILON
 p (bond_angle(geom.row(0), geom.row(1), geom.row(2)) * RAD_TO_DEG - 124.26830826072018).abs < Float::EPSILON
-p (torsion_angle(geom.row(6), geom.row(5), geom.row(4), geom.row(0)) * RAD_TO_DEG - 36.36679948827571).abs < Float::EPSILON
+p (torsion_angle(geom.row(6), geom.row(5), geom.row(4), geom.row(0)) * RAD_TO_DEG - 36.36679948827571).abs \
+< Float::EPSILON
 
-#TODO: Change distance matrix method to use an actual matrix
-#Calculate center of mass then continue from lesson 1
-#Create moleulce class to make getting atom attributes easier
+# TODO:
+# Calculate center of mass then continue from lesson 1
+# Move geometeric functions to a molecule class
