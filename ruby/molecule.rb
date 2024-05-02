@@ -78,7 +78,7 @@ class Molecule
     end
   end
 
-  def center
+  def center_cm_on_origin
     translate(-center_of_mass)
   end
 
@@ -139,5 +139,3 @@ class Molecule
     Math.acos(cos_tau.clamp(-1, 1))
   end
 end
-
-# TODO: refactor this class somehow
