@@ -5,8 +5,7 @@ require 'matrix'
 ATOMIC_WEIGHTS = CSV.read('../shared_data/atomic_weights.csv').map { |weight| weight[0].to_f }
 # Class represemts geometry information for molecule as well as transformations of geometric coordinates
 class Molecule
-  attr_reader :num_atom, :list_of_atoms, :distance_matrix
-  attr_accessor :geom, :atomic_weights, :hessian
+  attr_accessor :num_atom, :list_of_atoms, :distance_matrix, :geom, :atomic_weights, :hessian, :e_nuc, :s, :t, :v, :eri
 
   def initialize
     @num_atom = 0
@@ -30,7 +29,17 @@ class Molecule
     f = File.new(filename)
     puts 'Wrong number of atoms' unless @num_atom == f.readline.to_i
     input_data = lines_to_a(f)
-    @hessian = Matrix.build(@num_atom * 3, @num_atom * 3) { |i, j| input_data[3 * i + j / 3][j % 3] }
+    hes = []
+    (@num_atom * 3).times do |i|
+      hes[i] = input_data[@num_atom * i, @num_atom].flatten
+    end
+    @hessian = Matrix.build(@num_atom * 3, @num_atom * 3) do |i, j|
+      hes[i][j] / mass_weight(i, j)
+    end
+  end
+
+  def mass_weight(atom_i, atom_j)
+    Math.sqrt(@atomic_weights[atom_i / 3] * @atomic_weights[atom_j / 3])
   end
 
   def lines_to_a(filestream)
@@ -69,3 +78,5 @@ class Molecule
     @geom += Matrix.rows([xyz] * num_atom)
   end
 end
+
+# TODO: Refactor read_hessian to not iterate through data three(!) times

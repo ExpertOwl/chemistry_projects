@@ -19,7 +19,7 @@ WAVENUMBER_TO_MHZ = 2.99724589E4
 # Constants from files
 
 
-filename = 'acetaldehyde.dat'
+filename = './input/acetaldehyde.dat'
 
 def print_atomic_distances(mol)
   puts "Atomic Distances for #{mol} \n"
