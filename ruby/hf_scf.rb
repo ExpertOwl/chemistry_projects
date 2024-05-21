@@ -42,111 +42,129 @@ def read_2e_integrals(filename)
   data = f.readlines.map do |line|
     line.split.map(&:to_f)
   end
-  matr_size = data[-1][0]
-  res = [[[[0] * matr_size] * matr_size] * matr_size] * matr_size
+  res = {}
   data.each do |i, j, k, l, quant|
-    ii = i - 1
-    jj = j - 1
-    kk = k - 1
-    ll = l - 1
-    res[ii][jj][kk][ll] = quant
-    res[ii][jj][ll][kk] = quant
-    res[jj][ii][kk][ll] = quant
-    res[jj][ii][ll][kk] = quant
-    res[kk][ll][ii][jj] = quant
-    res[ll][kk][ii][jj] = quant
-    res[kk][ll][jj][ii] = quant
-    res[ll][kk][jj][ii] = quant
+    i = i.to_i - 1
+    j = j.to_i - 1
+    k = k.to_i - 1
+    l = l.to_i - 1
+    res[[i,j,k,l]] = quant
+    res[[i,j,l,k]] = quant
+    res[[j,i,k,l]] = quant
+    res[[j,i,l,k]] = quant
+    res[[k,l,i,j]] = quant
+    res[[l,k,i,j]] = quant
+    res[[k,l,j,i]] = quant
+    res[[l,k,j,i]] = quant
   end
   res
 end
 
-# def read_2e_integrals(filename)
-#   f = File.new(filename)
-#   data = f.readlines.map do |line|
-#     line.split.map(&:to_f)
-#   end
-#   matr_size = data[-1][0]
+def read_one_electron_integrals(mol, folder)
+  mol.read_geom("#{folder}/geom.dat")
+  mol.e_nuc = read_enuc_from_file("#{folder}/enuc.dat")
+  mol.s = two_center_quantity_from_file("#{folder}/s.dat")
+  mol.t = two_center_quantity_from_file("#{folder}/t.dat")
+  mol.v = two_center_quantity_from_file("#{folder}/v.dat")
+end
 
-#   qq = {}
-#   data.each do |i, j, k, l, quant|
-#     i -= 1
-#     j -= 1
-#     k -= 1
-#     l -= 1
-#     ij = compound(i,j)
-#     kl = compound(k,l)
-#     ijkl = compound(ij,kl)
-#     qq[ijkl.to_i] = quant
-#     qq[ijkl.to_i] = quant
-#   end
-#   qq
-# end
+def read_two_electron_integrals(mol,folder)
+  mol.eri = read_2e_integrals("#{folder}/eri.dat")
+end
 
-def compound(i, j)
-  i >= j ? ((i * (i + 1) / 2) + j) : ((j * (j + 1) / 2) + i)
+def get_s_half(mol)
+  v, eig, v_inv =  mol.s.eigensystem
+  v * (eig**-0.5) * v_inv
+end
+
+def order_by_eigenvalues(matrix, eigenvalues)
+ values = eigenvalues.max_by(eigenvalues.row_count, &:-@)
+ values.map! do |i|
+    eigenvalues.find_index(i)[0]
+  end
+  p values
+  Matrix.columns(values.map { |col_index| matrix.column_vectors[col_index] })
+end
+
+def density_from_fock(mol, sort = false)
+  mol.s_half = get_s_half(mol)
+  fock_transformed = mol.s_half.t * mol.fock * mol.s_half
+
+  c_0_prime, energy_eig, c_0_prime_inv = fock_transformed.eigensystem
+  pp energy_eig.to_a
+  c = mol.s_half * c_0_prime
+  if sort
+      c = order_by_eigenvalues(c, energy_eig) #Eigensystem does not guarantee order of eigenvalues, sort matrix
+  end
+  density_matrix = Matrix.build(c.row_count, c.column_count) do |i, j|
+
+    num = 0
+    mol.n_occ.times do |m|
+      num += c[j, m] * c[i, m]
+    end
+    num
+  end
+  density_matrix
+end
+
+def electronic_energy(mol)
+  e_elec = 0
+    mol.density.each_with_index do |d, i, j|
+      e_elec += d * (mol.fock[i, j] + mol.h_core[i, j])
+    end
+    e_elec
+end
+
+def fock_from_density(mol)
+  nao = mol.nao
+  eri = mol.eri
+  h_core = mol.h_core
+  density = mol.density
+  fock_new = Matrix.zero(nao, nao)
+  nao.times do |i|
+    nao.times do |j|
+      fock_new[i,j] = h_core[i,j]
+      nao.times do |k|
+        nao.times do |l|
+          if mol.eri[[i,j,k,l]] && mol.eri[[i,k,j,l]]
+            fock_new[i,j] += density[k,l] * (2 * eri[[i,j,k,l]] - eri[[i,k,j,l]])
+          end
+        end
+      end
+    end
+  end
+  fock_new
 end
 
 mol = Molecule.new
-mol.read_geom('./input/H2O/STO-3G/geom.dat')
-mol.e_nuc = read_enuc_from_file('./input/H2O/STO-3G/enuc.dat')
-mol.s = two_center_quantity_from_file('./input/H2O/STO-3G/s.dat')
-mol.t = two_center_quantity_from_file('./input/H2O/STO-3G/t.dat')
-mol.v = two_center_quantity_from_file('./input/H2O/STO-3G/v.dat')
-eri = read_2e_integrals('./input/H2O/STO-3G/eri.dat')
-# p mol.eri.size
-# p mol.eri
-h_core = mol.t + mol.v
+input_folder = "./input/H2O/STO-3G"
+mol.n_occ = 5
 
-v, eig, v_inv =  mol.s.eigensystem
-s_half = v * (eig**-0.5) * v_inv
-fock = s_half.t * h_core * s_half
-c_0_prime, e, = fock.eigensystem
-c = s_half * c_0_prime
+read_one_electron_integrals(mol, input_folder)
+read_two_electron_integrals(mol, input_folder)
 
-a = e.max_by(e.row_count, &:-@)
+mol.h_core = mol.t + mol.v
+mol.nao = mol.v.row_count
+mol.s_half = get_s_half(mol)
 
-a.map! do |i|
-  e.find_index(i)[0]
+#Initial guess
+mol.fock = mol.h_core
+#SCF
+puts " inital density \n"
+mol.density = density_from_fock(mol, true)
+mol.electronic_energy = electronic_energy(mol)
+pp mol.electronic_energy
+5.times do |i|
+  puts "iter #{i}"
+  mol.fock = fock_from_density(mol)
+  mol.density = density_from_fock(mol, true)
+  mol.electronic_energy = electronic_energy(mol)
+  pp mol.electronic_energy
+
 end
 
-c_ordered = Matrix.columns(a.map { |col_index| c.column_vectors[col_index] })
 
-density_matrix = Matrix.build(c_ordered.row_count, c_ordered.column_count) do |i, j|
-  num = 0
-  5.times do |m| # Need to get orbital occupiation somehow instead of using 5!!!
-    num += c_ordered[i, m] * c_ordered[j, m]
-  end
-  num
-end
-e_elec = 0
 
-# initial guess
-density_matrix.each_with_index do |d, i, j|
-  e_elec += d * (h_core[i, j] + h_core[i, j])
-end
-puts e_elec
 
-# build new fock
-p compound(compound(0, 0), compound(0, 3))
-nao = fock.row_count
-fock_new = Matrix.zero(fock.row_count, fock.column_count)
-2.times do |i|
-  fock_new[i, 0] = h_core[i, 0]
-  nao.times do |k|
-    nao.times do |l|
-      # fock_new[i,0] += (density_matrix[k,l] * eri[i][0][k][l] - 0.5 * eri[i][k][0][l])
-      puts eri[i][0][k][l] == eri[i][k][0][l]
-    end
-  end
-end
-# number += value * (2*mol.eri[ijkl] - mol.eri[ikjl])
-p fock_new
 
-8.times do |q|
-  p eri[q][q][q][q]
-end
-p
-
-# TODO: ERI is being read in wrong. need to figure out why
-get orbital occupiation somehow instead of using hard coded number
+# TODO: Either density is being calcualated wrong or fock is wrong. Not sure. Check S&O.

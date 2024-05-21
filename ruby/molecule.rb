@@ -5,7 +5,7 @@ require 'matrix'
 ATOMIC_WEIGHTS = CSV.read('../shared_data/atomic_weights.csv').map { |weight| weight[0].to_f }
 # Class represemts geometry information for molecule as well as transformations of geometric coordinates
 class Molecule
-  attr_accessor :num_atom, :list_of_atoms, :distance_matrix, :geom, :atomic_weights, :hessian, :e_nuc, :s, :t, :v, :eri
+  attr_accessor :num_atom, :list_of_atoms, :distance_matrix, :geom, :atomic_weights, :hessian, :e_nuc, :s, :t, :v, :eri, :h_core, :n_occ, :density, :electronic_energy, :nao, :fock, :s_half
 
   def initialize
     @num_atom = 0
